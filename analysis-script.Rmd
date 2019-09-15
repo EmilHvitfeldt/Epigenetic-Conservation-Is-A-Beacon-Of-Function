@@ -344,13 +344,19 @@ ggsave(filename = here("figures", "figure-2.png"), width = 7, dpi = 320, height 
 ## Figure 3
 
 ```{r figure3, echo = TRUE}
+
+c(colon = length(enrich_colon$Description),
+  si = length(enrich_si$Description),
+  endo = length(enrich_endo$Description)) %>%
+  sort()
+
 list(
   Colon             = enrich_colon$Description,
   `Small Intestine` = enrich_si$Description,
   Endometrium       = enrich_endo$Description
 ) %>%
   UpSetR::fromList() %>%
-  UpSetR::upset(sets.bar.color = RColorBrewer::brewer.pal(3, "Set2")[c(2, 3, 1)])
+  UpSetR::upset(sets.bar.color = RColorBrewer::brewer.pal(3, "Set2")[c(3, 2, 1)])
 grid::grid.text("Figure 3: Frequency of overlap between pathways that are called \nas most conserved for each tissue type.",x = 0.65, y=0.05, gp=grid::gpar(fontsize=10))
 
 png(file=here("figures", "figure-3.png"), width = 7, height = 4.326, units = "in", res = 320) # or other device
@@ -360,7 +366,7 @@ list(
   Endometrium       = enrich_endo$Description
 ) %>%
   UpSetR::fromList() %>%
-  UpSetR::upset(sets.bar.color = RColorBrewer::brewer.pal(3, "Set2")[c(2, 3, 1)])
+  UpSetR::upset(sets.bar.color = RColorBrewer::brewer.pal(3, "Set2")[c(3, 2, 1)])
 grid::grid.text("Figure 3: Frequency of overlap between pathways that are called \nas most conserved for each tissue type.",x = 0.65, y=0.05, gp=grid::gpar(fontsize=10))
 dev.off()
 ```
