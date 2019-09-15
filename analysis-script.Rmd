@@ -3,9 +3,11 @@ title: "Main analysis Script"
 author: "Emil Hvitfeldt"
 date: "2019-09-15"
 output: html_document
+params:
+  prep: FALSE
 ---
 
-```{r setup, include=FALSE}
+```{r setup, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(cache = TRUE, echo = FALSE)
 library(tidyverse)
 library(here)
@@ -25,7 +27,9 @@ set.seed(1234)
 
 ## Data Preparation
 
-```{r}
+The following function, will take a folder containing .idat files and calculates the noob adjusted beta values for the samples.
+
+```{r , echo = TRUE, eval=params$prep}
 idat_to_beta_values_noob <- function(base) {
   RGset <- read.metharray.exp(base = base)
   RGset@annotation = c(array = "IlluminaHumanMethylationEPIC", annotation = "ilm10b4.hg19")
@@ -38,13 +42,18 @@ idat_to_beta_values_noob <- function(base) {
 }
 ```
 
-```{r idatfiles}
+This function is applied to each of the tissue folders. 
+
+```{r idatfiles, echo = TRUE, eval=params$prep}
 colon_idat <- idat_to_beta_values_noob(base = "data-raw/colon-idat/")
 si_idat <- idat_to_beta_values_noob(base = "data-raw/si-idat/")
 endo_idat <- idat_to_beta_values_noob(base = "data-raw/endo-idat/")
 ```
 
-```{r prepped_data}
+Infinium MethylationEPIC v1.0 B4 Manifest File (CSV Format) is to be downloaded from the following link
+https://support.illumina.com/downloads/infinium-methylationepic-v1-0-product-files.html and `MethylationEPIC_v-1-0_B4.csv` should be placed in the folder `data-raw`. `pwd()` will take a vector and calculate the average manhattan distance. We then apply it row-wise to the methylation data. Lastly we take the calulated average manhattan distances and append  it to the manifest file. 
+
+```{r prepped_data, echo = TRUE, eval=params$prep}
 pwd <- function(x) {
   mean(dist(x, method = "manhattan"))
 }
@@ -76,7 +85,9 @@ prepped_data <-
 write_csv(prepped_data, here("data", "prepped_data.csv"))
 ```
 
-```{r gened_data}
+Next we seperate the rows to apply for a CpG site to appear in multiple genes as annotated.
+
+```{r gened_data, echo = TRUE, eval=params$prep}
 gened_data <- prepped_data %>%
   arrange(CHR, MAPINFO) %>%
   mutate(temp = floor(row_number() / n() * 100)) %>%
@@ -86,14 +97,18 @@ gened_data <- prepped_data %>%
 write_csv(gened_data, here("data", "gened_data.csv"))
 ```
 
-```{r pwd_by_gene}
+Here we apply the the first function from methcon5, we calculates the unadjusted conservation for each gene for each of the tissue types.
+
+```{r pwd_by_gene, echo = TRUE, eval=params$prep}
 gened_data <- read_csv(here("data", "gened_data.csv"))
 pwd_by_gene <- gened_data %>%
   filter(!is.na(UCSC_RefGene_Name)) %>%
   ii_summarize(UCSC_RefGene_Name, colon_pwd:endo_pwd)
 ```
 
-```{r permed_data}
+Next we apply the second function from methcon5 where we will apply two different boot-strapping method to each of the tissuetypes.
+
+```{r permed_data, echo = TRUE, eval=params$prep}
 permed_data <- pwd_by_gene %>%
   filter(n < quantile(n, 0.99)) %>%
   bootter(gened_data, colon_pwd, UCSC_RefGene_Name, 1000,  method = 1) %>%
@@ -106,7 +121,15 @@ permed_data <- pwd_by_gene %>%
 write_csv(permed_data, here("data", "permed_data.csv"))
 ```
 
-```{r promoted_data}
+```{r loadingdata, eval=!params$prep}
+gened_data <- read_csv(here("data", "gened_data.csv"))
+permed_data <- read_csv(here("data", "permed_data.csv"))
+prepped_data <- read_csv(here("data", "prepped_data.csv"))
+```
+
+Next we calculate the mean methylation for CpG sites in the promotor region.
+
+```{r promoted_data, echo = TRUE}
 promoted_data <- prepped_data %>%
   mutate(gene = str_extract(UCSC_RefGene_Name, "^[^;]+")) %>%
   filter(!is.na(gene)) %>%
@@ -120,7 +143,9 @@ promoted_data <- prepped_data %>%
             endo_pro = mean(endo_pwd))
 ```
 
-```{r expression_atlas}
+Expression data can be  downloaded from the following website https://www.ebi.ac.uk/gxa/experiments/E-MTAB-2836/Results, and the resulting file `E-MTAB-2836-query-results.tpms.tsv` should be placed in the folder named `data-raw`.
+
+```{r expression_atlas, echo = TRUE}
 expression_atlas <- read_tsv(here("data-raw", "E-MTAB-2836-query-results.tpms.tsv"), skip = 4, 
                              col_types = cols(
   .default = col_double(),
@@ -129,10 +154,11 @@ expression_atlas <- read_tsv(here("data-raw", "E-MTAB-2836-query-results.tpms.ts
 ))
 ```
 
-
 ## Gene enrichment set analysis
 
-```{r gesa}
+In the following code we apply gene enrichment set analysis on the 5% most conserved genes for each tissue type one at a time.
+
+```{r gesa, echo = TRUE}
 tidy_gsea <- function(genes) {
   AnnotationDbi::mapIds(org.Hs.eg.db::org.Hs.eg.db, genes, 'ENTREZID', 'SYMBOL') %>%
   ReactomePA::enrichPathway()
@@ -154,10 +180,11 @@ enrich_endo <- permed_data %>%
   tidy_gsea()
 ```
 
-
 ## Table 1
 
-```{r table1_gene}
+The calculations happening in the following bits of code follow the same steps. Split the data accoding to a specified region. Then calculate the mean pwd for each tissue type.
+
+```{r table1_gene, echo = TRUE}
 prepped_data %>%
   group_by(`Gene Associated` = !is.na(UCSC_RefGene_Name)) %>%
   summarise_at(vars(colon_pwd:endo_pwd), mean, na.rm = TRUE) %>%
@@ -174,7 +201,7 @@ prepped_data %>%
   )
 ```
 
-```{r table1_island}
+```{r table1_island, echo = TRUE}
 prepped_data %>%
   group_by(`Island relation` = Relation_to_UCSC_CpG_Island) %>%
   summarise_at(vars(colon_pwd:endo_pwd), mean, na.rm = TRUE) %>%
@@ -196,7 +223,7 @@ prepped_data %>%
   )
 ```
 
-```{r table1_5utr}
+```{r table1_5utr, echo = TRUE}
 prepped_data %>%
   group_by(`5'UTR` = str_detect(UCSC_RefGene_Group, "5'UTR") & !is.na(UCSC_RefGene_Group)) %>%
   summarise_at(vars(colon_pwd:endo_pwd), mean, na.rm = TRUE) %>%
@@ -213,7 +240,7 @@ prepped_data %>%
   )
 ```
 
-```{r table1tss1500}
+```{r table1tss1500, echo = TRUE}
 prepped_data %>%
   group_by(`TSS1500` = str_detect(UCSC_RefGene_Group, "TSS1500") & !is.na(UCSC_RefGene_Group)) %>%
   summarise_at(vars(colon_pwd:endo_pwd), mean, na.rm = TRUE) %>%
@@ -230,7 +257,7 @@ prepped_data %>%
   )
 ```
 
-```{r table1tss200}
+```{r table1tss200, echo = TRUE}
 prepped_data %>%
   group_by(`TSS200` = str_detect(UCSC_RefGene_Group, "TSS200") & !is.na(UCSC_RefGene_Group)) %>%
   summarise_at(vars(colon_pwd:endo_pwd), mean, na.rm = TRUE) %>%
@@ -247,11 +274,9 @@ prepped_data %>%
   )
 ```
 
-
-
 ## Figure 1
 
-```{r distance_length}
+```{r distance_length, echo = TRUE}
 distance_length <- gened_data %>%
   filter(!is.na(UCSC_RefGene_Name)) %>%
   select(CHR, MAPINFO, UCSC_RefGene_Name, colon_pwd:endo_pwd) %>%
@@ -266,7 +291,7 @@ distance_length <- gened_data %>%
   mutate(location_bin = as.numeric(str_extract(location_bin, "(?<=,)(.*)(?=])")))
 ```
 
-```{r figure1}
+```{r figure1, echo = TRUE}
 distance_length %>%
   drop_na() %>%
   pivot_longer(mean_colon:mean_endo) %>% 
@@ -290,10 +315,9 @@ distance_length %>%
 ggsave(filename = here("figures", "figure-1.png"), width = 7, dpi = 320, height = 4.326)
 ```
 
-
 ## Figure 2
 
-```{r figure2}
+```{r figure2, echo = TRUE}
 permed_data %>%
   pivot_longer(dplyr::matches("1|3")) %>%
   separate(name, into = c("type", "method"), sep = "_v") %>%
@@ -319,7 +343,7 @@ ggsave(filename = here("figures", "figure-2.png"), width = 7, dpi = 320, height 
 
 ## Figure 3
 
-```{r figure3}
+```{r figure3, echo = TRUE}
 list(
   Colon             = enrich_colon$Description,
   `Small Intestine` = enrich_si$Description,
@@ -343,7 +367,7 @@ dev.off()
 
 ## Figure 4
 
-```{r figure4}
+```{r figure4, echo = TRUE}
 ggg <- enrich_si %>%
   ReactomePA::emapplot(showCategory = 30, layout = "graphopt") +
   labs(caption = "Figure 4: Relationship between pathways that are called as conserved in small intestine tissue.",
@@ -360,11 +384,9 @@ ggg +
 ggsave(filename = here("figures", "figure-4.png"), width = 7, dpi = 320, height = 4.326)
 ```
 
-
-
 ## Figure 5
 
-```{r figure5}
+```{r figure5, echo = TRUE}
 figure5_data <- permed_data %>% 
   left_join(by = c("UCSC_RefGene_Name" = "gene"),
   promoted_data
@@ -408,4 +430,3 @@ bind_rows(
 
 ggsave(filename = here("figures", "figure-5.png"), width = 7, dpi = 320, height = 4.326)
 ```
-
