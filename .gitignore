@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+analysis-script_cache/
+analysis-script_files/
+data/
+data-raw/colon-idat/*
+!data-raw/colon-idat/.gitkeep 
+data-raw/si-idat/*
+!data-raw/si-idat/.gitkeep 
+data-raw/endo-idat/*
+!data-raw/endo-idat/.gitkeep 
