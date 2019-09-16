@@ -2,7 +2,7 @@
 title: "Main analysis Script"
 author: "Emil Hvitfeldt"
 date: "2019-09-15"
-output: html_document
+output: md_document
 params:
   prep: FALSE
 ---
