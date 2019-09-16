@@ -303,7 +303,7 @@ distance_length %>%
   ggforce::facet_zoom(location_bin < 5000) +
   theme_light() +
   theme(legend.position = "bottom") +
-  labs(title = "The lowest average Manhattan distance is located around 1500 basepairs \nfrom first CpG site in the gene",
+  labs(title = NULL,
        fill = NULL,
        color = NULL,
        x = "Distance by hg19 position from first cpg site (binned to 100s)",
@@ -322,8 +322,8 @@ permed_data %>%
   pivot_longer(dplyr::matches("1|3")) %>%
   separate(name, into = c("type", "method"), sep = "_v") %>%
   mutate(method = factor(method, c("1", "3"),
-                             c("Naive method",
-                               "Boot-strapping method")),
+                             c("Naive bootstrap",
+                               "Adjusted bootstrap")),
          type = factor(type, c("colon_pwd", "si_pwd", "endo_pwd"),
                              c("Colon", "Small Intestine", "Endometrium"))) %>%
   ggplot(aes(value, fill = type)) +
@@ -332,7 +332,7 @@ permed_data %>%
   theme_minimal() +
   labs(x = "p-value",
        y = "Number of genes",
-       title = "Applying boot-strapping over the Naive method allows for \nbetter ranking of highly conserved genes",
+       title = NULL,
        caption = "Figure 2: Distribution of boot-strapping p-values for genes as a function of tissue type and method used.")  +
   theme(legend.position = "none") +
   scale_color_brewer(palette = "Set2") +
@@ -377,7 +377,7 @@ dev.off()
 ggg <- enrich_si %>%
   ReactomePA::emapplot(showCategory = 30, layout = "graphopt") +
   labs(caption = "Figure 4: Relationship between pathways that are called as conserved in small intestine tissue.",
-       title = "Relationship between pathways for 30 most over-represented pathways")
+       title = NULL)
 
 ggg$layers <- ggg$layers[1:2]
 
@@ -428,7 +428,7 @@ bind_rows(
   guides(color = "none") +
   facet_grid(method ~ type) +
   labs(x = "bin", y = "Expression",
-       title = "Boot-strapped values have higher correlation with expression \nthen just using Promoter regions",
+       title = NULL,
        caption = "Figure 5: Relationship between conservation and expression according to tissue type.") +
   theme_minimal() +
   scale_fill_brewer(palette = "Set2") +
