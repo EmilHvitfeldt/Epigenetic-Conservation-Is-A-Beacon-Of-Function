@@ -3,7 +3,6 @@
     library(here)
     library(gt)
     library(rlang)
-    library(methcon5)
     library(minfi)
 
     select <- dplyr::select
@@ -13,6 +12,14 @@
     dir.create(here("figures"))
 
     set.seed(1234)
+
+
+The **methcon5** package have been updated since this writeup. Please install old version to complete analysis
+
+
+    #remotes::install_github("EmilHvitfeldt/methcon5@0.0.0.9000")
+    library(methcon5)
+
 
 Data Preparation
 ----------------

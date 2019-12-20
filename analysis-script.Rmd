@@ -13,7 +13,6 @@ library(tidyverse)
 library(here)
 library(gt)
 library(rlang)
-library(methcon5)
 library(minfi)
 
 select <- dplyr::select
@@ -23,6 +22,13 @@ filter <- dplyr::filter
 dir.create(here("figures"))
 
 set.seed(1234)
+```
+
+The **methcon5** package have been updated since this writeup. Please install old version to complete analysis
+
+```{r}
+#remotes::install_github("EmilHvitfeldt/methcon5@0.0.0.9000")
+library(methcon5)
 ```
 
 ## Data Preparation
@@ -302,15 +308,16 @@ distance_length %>%
   geom_point(key_glyph = draw_key_rect) +
   ggforce::facet_zoom(location_bin < 5000) +
   theme_light() +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "bottom",
+        plot.caption = element_text(hjust = 0)) +
   labs(title = NULL,
        fill = NULL,
        color = NULL,
        x = "Distance by hg19 position from first cpg site (binned to 100s)",
        y = "Average Manhattan Distance", 
-       caption = "Figure 1: Average Manhattan distance for single CpGs as a function of position relative to gene.") +
+       caption = str_wrap("Figure 1: Average Manhattan distance for single CpGs as a function of position relative to first 5' annotated gene CpG site.  The greater conservation (lower average Manhattan distances) around genes indicates DNA methylation conservation generally extends for hundreds of base pairs and is not isolated to a single CpG site.", 100)) +
   scale_color_brewer(palette = "Set2") +
-  scale_fill_brewer(palette = "Set2")
+  scale_fill_brewer(palette = "Set2") 
 
 ggsave(filename = here("figures", "figure-1.png"), width = 7, dpi = 320, height = 4.326)
 ```
@@ -330,10 +337,11 @@ permed_data %>%
   geom_histogram(bins = 50, color = "grey30") +
   facet_grid(method~type, scales = "free") +
   theme_minimal() +
+  theme(plot.caption = element_text(hjust = 0)) +
   labs(x = "p-value",
        y = "Number of genes",
        title = NULL,
-       caption = "Figure 2: Distribution of boot-strapping p-values for genes as a function of tissue type and method used.")  +
+       caption = str_wrap("Figure 2: Distribution of boot-strapping p-values for genes. Each column corresponds to a specific tissue. The top row shows results from the naive bootstrap procedure, whereas the bottom row shows the adjusted bootstrap results."), 100)  +
   theme(legend.position = "none") +
   scale_color_brewer(palette = "Set2") +
   scale_fill_brewer(palette = "Set2")
@@ -367,7 +375,6 @@ list(
 ) %>%
   UpSetR::fromList() %>%
   UpSetR::upset(sets.bar.color = RColorBrewer::brewer.pal(3, "Set2")[c(3, 2, 1)])
-grid::grid.text("Figure 3: Frequency of overlap between pathways that are called \nas most conserved for each tissue type.",x = 0.65, y=0.05, gp=grid::gpar(fontsize=10))
 dev.off()
 ```
 
@@ -388,6 +395,95 @@ ggg +
          size = "none")
 
 ggsave(filename = here("figures", "figure-4.png"), width = 7, dpi = 320, height = 4.326)
+```
+
+Interactive enrichment map 
+
+```{r}
+n <- enrichplot:::update_n(enrich_si, 30)
+gene_sets <- DOSE::geneInCategory(enrich_si)
+y <- as.data.frame(enrich_si)
+
+
+id <- y[, 1]
+gene_sets <- gene_sets[id]
+n <- nrow(y)
+w <- matrix(NA, nrow = n, ncol = n)
+colnames(w) <- rownames(w) <- y$Description
+for (i in 1:n) {
+    for (j in i:n) {
+        w[i, j] = enrichplot:::overlap_ratio(gene_sets[id[i]], gene_sets[id[j]])
+    }
+}
+
+wd <- reshape2::melt(w)
+wd <- wd[wd[, 1] != wd[, 2], ]
+wd <- wd[!is.na(wd[, 3]), ]
+
+g <- igraph::graph.data.frame(wd[, -3], directed = FALSE)
+igraph::E(g)$width = sqrt(wd[, 3] * 5)
+g <- igraph::delete.edges(g, igraph::E(g)[wd[, 3] < 0.5])
+idx <- unlist(sapply(igraph::V(g)$name, function(x) which(x == 
+    y$Description)))
+cnt <- sapply(gene_sets[idx], length)
+igraph::V(g)$size <- cnt
+colVar <- y[idx, "p.adjust"]
+igraph::V(g)$color <- colVar
+
+library(networkD3)
+library(igraph)
+
+wc <- cluster_walktrap(g)
+members <- membership(wc)
+
+d3 <- igraph_to_networkD3(g, group = members)
+
+# Create force directed network plot
+forceNetwork(Links = d3$links, Nodes = d3$nodes, 
+             Source = 'source', Target = 'target', 
+             NodeID = 'name', Group = 'group', charge = -5, bounded = TRUE, opacity = 1, fontSize = 14)
+```
+
+```{r}
+
+topic_summary <- function(x) {
+  x %>%
+    names() %>%
+    tokenizers::tokenize_words(stopwords = stopwords::stopwords(source = "stopwords-iso")) %>%
+    unlist() %>%
+    table() %>%
+    sort(decreasing = TRUE) %>%
+    .[1:3] %>%
+    names() %>%
+    paste(collapse = ", ")
+}
+
+```
+
+```{r}
+# blue
+members[members == 1] %>%
+  topic_summary()
+
+# light green
+members[members == 2] %>%
+  topic_summary()
+
+# beige
+members[members == 3] %>%
+  topic_summary()
+
+# Red
+members[members == 4] %>%
+  topic_summary()
+
+# light blue
+members[members == 5] %>%
+  topic_summary()
+
+# purple
+members[members == 7] %>%
+  topic_summary()
 ```
 
 ## Figure 5
@@ -418,7 +514,8 @@ bind_rows(
   rename(expression = endometrium)
 ) %>%
   group_by(name) %>%
-  mutate(value = factor(as.numeric(cut_number(value, 10)))) %>%
+  mutate(value = factor(as.numeric(cut_number(value, 10)), levels = 1:10, 
+                        labels = paste0(0:9 * 10, "-", 1:10 * 10, "%"))) %>%
   separate(name, c("type", "method"), sep = "_", extra = "merge") %>%
   mutate(type = factor(type, c("colon", "si", "endo"), c("Colon", "Small Intenstine", "Endometrium")),
          method = factor(method, c("pwd_v3", "pro"), c("Boot-strapped values", "Promoter region"))) %>%
@@ -426,13 +523,39 @@ bind_rows(
   geom_boxplot() +
   scale_y_log10() +
   guides(color = "none") +
-  facet_grid(method ~ type) +
-  labs(x = "bin", y = "Expression",
+  facet_grid(method ~ type, scales = "free_x") +
+  labs(x = "quantile of conservation by gene", 
+       y = "Expression",
        title = NULL,
-       caption = "Figure 5: Relationship between conservation and expression according to tissue type.") +
+       caption = str_wrap("Figure 5: The relationship between conservation and expression. Genes are collected into 10 groups according to the degree of conservation measured in our data. For each group, we then show a box-pot of the distribution of log(gene expression) values recorded for the corresponding tissue type in the Expression Atlas database. Columns correspond to the tissue type. The top row shows results when assessing conservation for the entire gene; the bottom row shows the results when assessing conservation just for the promoter region of each gene. We see that gene conservation correlates with expression better than does promoter conservation.", 100)) +
   theme_minimal() +
+  theme(plot.caption = element_text(hjust = 0)) +
   scale_fill_brewer(palette = "Set2") +
-  theme(legend.position = "none")
+  theme(legend.position = "none", 
+        axis.text.x = element_text(angle = 90, hjust = 1))
 
 ggsave(filename = here("figures", "figure-5.png"), width = 7, dpi = 320, height = 4.326)
 ```
+
+```{r}
+bind_rows(
+  figure5_data %>%
+  select(colon_pwd_v3, colon_pro, colon) %>%
+  pivot_longer(-colon) %>%
+  drop_na() %>%
+  rename(expression = colon),
+  figure5_data %>%
+  select(si_pwd_v3, si_pro, `small intestine`) %>%
+  pivot_longer(-`small intestine`) %>%
+  drop_na() %>%
+  rename(expression = `small intestine`),
+  figure5_data %>%
+  select(endo_pwd_v3, endo_pro, endometrium) %>%
+  pivot_longer(-endometrium) %>%
+  drop_na() %>%
+  rename(expression = endometrium)
+) %>%
+  ggplot(aes(value)) +
+  geom_histogram()
+```
+
